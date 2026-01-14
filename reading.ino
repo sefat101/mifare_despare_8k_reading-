@@ -135,3 +135,22 @@ void loop() {
 
   delay(2000);
 }
+Arduino: 1.8.19 (Linux), Board: "DOIT ESP32 DEVKIT V1, 80MHz, 921600, None, Disabled"
+
+/home/meow/meow/rfid_project/esp32/rfid2.ino/pn532.ino/pn532.ino.ino: In function 'bool inDataExchange(const uint8_t*, uint8_t, uint8_t*, uint8_t*)':
+pn532.ino:31:67: error: invalid conversion from 'int' to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
+   31 |   int16_t len = nfc.inDataExchange((uint8_t*)apdu, apduLen, resp, 255);
+      |                                                                   ^~~
+      |                                                                   |
+      |                                                                   int
+In file included from /home/meow/meow/rfid_project/esp32/rfid2.ino/pn532.ino/pn532.ino.ino:3:
+/home/meow/arduino-1.8.19/libraries/PN532/PN532.h:162:88: note:   initializing argument 4 of 'bool PN532::inDataExchange(uint8_t*, uint8_t, uint8_t*, uint8_t*)'
+  162 |     bool inDataExchange(uint8_t *send, uint8_t sendLength, uint8_t *response, uint8_t *responseLength);
+      |                                                                               ~~~~~~~~~^~~~~~~~~~~~~~
+exit status 1
+invalid conversion from 'int' to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
+
+
+This report would have more information with
+"Show verbose output during compilation"
+option enabled in File -> Preferences.
