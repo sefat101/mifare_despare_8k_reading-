@@ -2,13 +2,12 @@
 #include <PN532_SPI.h>
 #include <PN532.h>
 
-// --- SPI pins for ESP32 (VSPI) ---
+// ESP32 VSPI pins
 static const int PN532_SCK  = 18;
 static const int PN532_MISO = 19;
 static const int PN532_MOSI = 23;
-static const int PN532_SS   = 5;   // Chip Select (CS)
+static const int PN532_SS   = 5;   // CS/SSEL
 
-// Create SPI bus instance (VSPI)
 SPIClass spi(VSPI);
 PN532_SPI pn532spi(spi, PN532_SS);
 PN532 nfc(pn532spi);
@@ -27,25 +26,24 @@ static bool desfireOK(const uint8_t* resp, uint8_t respLen) {
   return (respLen >= 2 && resp[respLen - 2] == 0x91 && resp[respLen - 1] == 0x00);
 }
 
-static bool inDataExchange(const uint8_t* apdu, uint8_t apduLen, uint8_t* resp, uint8_t* respLen) {
-  int16_t len = nfc.inDataExchange((uint8_t*)apdu, apduLen, resp, 255);
-  if (len <= 0) return false;
-  *respLen = (uint8_t)len;
-  return true;
+// Correct wrapper for YOUR PN532 library signature
+static bool sendApdu(const uint8_t* apdu, uint8_t apduLen, uint8_t* resp, uint8_t* respLen) {
+  // respLen must contain max buffer size before call in some libs.
+  // We'll assume resp is big enough and just let library fill respLen.
+  return nfc.inDataExchange((uint8_t*)apdu, apduLen, resp, respLen);
 }
 
 void setup() {
   Serial.begin(115200);
   delay(200);
-  Serial.println("\nESP32 + PN532 (SPI) -> DESFire Roll Reader");
+  Serial.println("\nESP32 + PN532(SPI) DESFire Roll Reader");
 
-  // Start SPI with explicit pins
   spi.begin(PN532_SCK, PN532_MISO, PN532_MOSI, PN532_SS);
 
   nfc.begin();
   uint32_t versiondata = nfc.getFirmwareVersion();
   if (!versiondata) {
-    Serial.println("PN532 not found. Check SPI wiring + set PN532 to SPI mode.");
+    Serial.println("PN532 not found. Check wiring + ensure PN532 is in SPI mode.");
     while (1) delay(10);
   }
 
@@ -74,10 +72,10 @@ void loop() {
   const uint8_t selectApp[] = { 0x90, 0x5A, 0x00, 0x00, 0x03, 0x52, 0x55, 0x44, 0x00 };
 
   uint8_t resp[255];
-  uint8_t respLen = 0;
+  uint8_t respLen = sizeof(resp); // max len allowed to write (some versions ignore this)
 
-  if (!inDataExchange(selectApp, sizeof(selectApp), resp, &respLen)) {
-    Serial.println("SelectApplication: no response");
+  if (!sendApdu(selectApp, sizeof(selectApp), resp, &respLen)) {
+    Serial.println("SelectApplication: failed (no response).");
     delay(1000);
     return;
   }
@@ -86,22 +84,24 @@ void loop() {
   printHex(resp, respLen);
 
   if (!desfireOK(resp, respLen)) {
-    Serial.println("SelectApplication failed (wrong AID or access rights).");
+    Serial.println("SelectApplication NOT OK (wrong AID / access rights).");
     delay(1000);
     return;
   }
 
-  // 2) ReadData file=01 offset=000000 length=00000A (10 bytes)
+  // 2) ReadData: File 0x01, offset 0x000000, length 10 bytes (0x00000A)
   const uint8_t readRoll10[] = {
     0x90, 0xBD, 0x00, 0x00, 0x07,
     0x01,
-    0x00, 0x00, 0x00,   // offset
-    0x00, 0x00, 0x0A,   // length 10
+    0x00, 0x00, 0x00,  // offset
+    0x00, 0x00, 0x0A,  // length = 10
     0x00
   };
 
-  if (!inDataExchange(readRoll10, sizeof(readRoll10), resp, &respLen)) {
-    Serial.println("ReadData: no response");
+  respLen = sizeof(resp);
+
+  if (!sendApdu(readRoll10, sizeof(readRoll10), resp, &respLen)) {
+    Serial.println("ReadData: failed (no response).");
     delay(1000);
     return;
   }
@@ -110,22 +110,19 @@ void loop() {
   printHex(resp, respLen);
 
   if (!desfireOK(resp, respLen)) {
-    Serial.println("ReadData failed (needs auth? wrong file?).");
+    Serial.println("ReadData NOT OK (needs auth? wrong file?).");
     delay(1000);
     return;
   }
 
-  // payload = respLen - 2 (strip 91 00)
+  // Payload = everything except last 2 bytes (91 00)
   uint8_t payloadLen = respLen - 2;
-
-  Serial.print("Roll (HEX): ");
-  printHex(resp, payloadLen);
 
   Serial.print("Roll (ASCII): ");
   for (uint8_t i = 0; i < payloadLen; i++) Serial.print((char)resp[i]);
   Serial.println();
 
-  // clean digits only
+  // digits only
   String roll = "";
   for (uint8_t i = 0; i < payloadLen; i++) {
     if (resp[i] >= '0' && resp[i] <= '9') roll += (char)resp[i];
@@ -135,22 +132,3 @@ void loop() {
 
   delay(2000);
 }
-Arduino: 1.8.19 (Linux), Board: "DOIT ESP32 DEVKIT V1, 80MHz, 921600, None, Disabled"
-
-/home/meow/meow/rfid_project/esp32/rfid2.ino/pn532.ino/pn532.ino.ino: In function 'bool inDataExchange(const uint8_t*, uint8_t, uint8_t*, uint8_t*)':
-pn532.ino:31:67: error: invalid conversion from 'int' to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
-   31 |   int16_t len = nfc.inDataExchange((uint8_t*)apdu, apduLen, resp, 255);
-      |                                                                   ^~~
-      |                                                                   |
-      |                                                                   int
-In file included from /home/meow/meow/rfid_project/esp32/rfid2.ino/pn532.ino/pn532.ino.ino:3:
-/home/meow/arduino-1.8.19/libraries/PN532/PN532.h:162:88: note:   initializing argument 4 of 'bool PN532::inDataExchange(uint8_t*, uint8_t, uint8_t*, uint8_t*)'
-  162 |     bool inDataExchange(uint8_t *send, uint8_t sendLength, uint8_t *response, uint8_t *responseLength);
-      |                                                                               ~~~~~~~~~^~~~~~~~~~~~~~
-exit status 1
-invalid conversion from 'int' to 'uint8_t*' {aka 'unsigned char*'} [-fpermissive]
-
-
-This report would have more information with
-"Show verbose output during compilation"
-option enabled in File -> Preferences.
